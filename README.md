@@ -18,15 +18,22 @@ jupyter lab notebooks/nisar_gunw_from_rslcs.ipynb
 ```
 
 In section 1 of the notebook, set `REF_RSLC` and `SEC_RSLC`, then run all cells. With
-`DEM_FILE = None`, it downloads the NISAR DEM v1.2 for the scene from ASF. That needs an
-Earthdata Login; the notebook asks once and saves it to `~/.netrc`.
+`DEM_FILE = None`, it downloads the DEM for the scene with [sardem](https://github.com/scottstanie/sardem):
+
+* `DEM_SOURCE = "NISAR"` (default): the NISAR DEM v1.2. Needs an Earthdata Login; the
+  notebook asks once and saves it to `~/.netrc`.
+* `DEM_SOURCE = "COP"`: Copernicus GLO-30, no login needed.
+
+**ISCE3 0.25 or newer is required.** Older versions (e.g. 0.24) reject the standard
+parameters, and the notebook stops with a clear message if it finds one.
 
 ## What the notebook does
 
 1. **Inspects both RSLCs** with PLAnT-ISCE3. It checks that they pair: same track, pass
    direction and look direction; the polarization exists in both; the footprints overlap. It
    also checks whether frequency B is present, which the ionosphere step needs.
-2. **Stages the DEM**: either the NISAR DEM v1.2 cut to both footprints plus 5 km, or your own.
+2. **Gets the DEM** with sardem, covering both footprints plus 5 km (NISAR DEM v1.2 or
+   Copernicus GLO-30), or uses your own.
 3. **Builds the runconfig** from the standard parameters. It fills in:
    * the inputs and output paths
    * the NISAR projection for the scene: UTM zone, or polar stereographic beyond ±75°
@@ -94,5 +101,5 @@ filter kernels via `OVERRIDES`. All other settings were standard.
 
 Not tested here (no network access to ASF from the build environment):
 
-* the live NISAR DEM download (the same GDAL code was run against a local DEM)
+* the live sardem download (its NISAR path was run against a local copy of the VRT layout)
 * a full-size NISAR pair

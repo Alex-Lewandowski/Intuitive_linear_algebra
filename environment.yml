@@ -4,7 +4,7 @@ channels:
   - conda-forge
 dependencies:
   - python=3.12
-  - isce3>=0.25
+  - isce3>=0.25.22     # the standard parameters need >= 0.25
   - plant-isce3
   # Imported by nisar.workflows.insar but not pulled in by the conda isce3 package:
   - pyaps3            # troposphere module (imported even when troposphere is off)
@@ -16,6 +16,7 @@ dependencies:
   - git
   # notebook
   - earthaccess       # Earthdata Login for the NISAR DEM download
+  - sardem            # DEM download (NISAR DEM v1.2 or Copernicus GLO-30)
   - matplotlib
   - jupyterlab
   - ipykernel
