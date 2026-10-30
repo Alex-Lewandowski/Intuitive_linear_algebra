@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nisar-subset"
+version = "0.1.0"
+description = "Spatially subset NISAR L1 RSLC products into ISCE3-ready NISAR-format RSLCs"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = [
+    "h5py>=3.8",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "shapely>=2.0",
+    "pyproj>=3.5",
+]
+
+[project.optional-dependencies]
+remote = ["earthaccess>=0.12", "fsspec", "aiohttp"]
+notebook = ["earthaccess>=0.12", "matplotlib", "jupyterlab"]
+test = ["pytest"]
+
+[project.scripts]
+subset-rslc = "nisar_subset.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

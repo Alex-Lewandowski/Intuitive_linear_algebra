@@ -1,0 +1,8 @@
+envisat_rslc_fixture.h5 is derived from tests/data/envisat.h5 of ISCE3
+(https://github.com/isce-framework/isce3), Copyright California Institute of
+Technology, licensed under the Apache License, Version 2.0
+(http://www.apache.org/licenses/LICENSE-2.0).
+
+Changes: geolocation grid regenerated with ISCE3, image layers converted to
+complex32 with a synthetic HV layer, sub-swath and frame-coverage metadata
+added. See tests/make_fixture.py.
