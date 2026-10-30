@@ -1,0 +1,26 @@
+# conda env create -f environment.yml && conda activate nisar-gunw
+name: nisar-gunw
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - isce3>=0.25
+  - plant-isce3
+  # Imported by nisar.workflows.insar but not pulled in by the conda isce3 package:
+  - pyaps3            # troposphere module (imported even when troposphere is off)
+  - snaphu            # snaphu-py, the default unwrapper
+  # whirlwind (also imported by the unwrap step) is not on conda-forge; build it below
+  - c-compiler
+  - cxx-compiler
+  - cmake
+  - git
+  # notebook
+  - earthaccess       # Earthdata Login for the NISAR DEM download
+  - matplotlib
+  - jupyterlab
+  - ipykernel
+  - pip
+  - pip:
+    - git+https://github.com/isce-framework/whirlwind
+  # Optional, for the troposphere layers (needs ECMWF HRES weather-model files):
+  # - raider

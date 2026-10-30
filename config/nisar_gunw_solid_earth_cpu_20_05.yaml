@@ -1,0 +1,141 @@
+# Standard NISAR GUNW processing parameters for ISCE3's InSAR workflow
+# (nisar.workflows.insar).
+#
+# Taken from the runconfig of an official NISAR L-band GUNW, generated from the
+# parameter set
+#   s3://nisar-static-repo/LSAR_PARAMETER_SET/05020/INSAR/NISAR_ParameterSet_INSAR_20000101_solid_earth_cpu_20_05_v0.1.yaml
+# (PGE INSAR_L_PGE r05.02.3, composite release P05023, 20+5 MHz "DH" mode).
+#
+# Only processing parameters are kept here. The notebook fills in everything
+# that is specific to a pair:
+#   - input RSLCs and ancillary files
+#   - output and scratch paths
+#   - output EPSG and geocoding box: the official ones are fixed per track/frame;
+#     the notebook uses the NISAR EPSG convention instead
+#   - whether the ionosphere and troposphere steps can run with what you have
+#
+# Values not listed here take ISCE3's defaults, as in the official run.
+# One schema fix: phase_unwrap.preprocess_wrapped_phase.mask.mask_type is
+# written as a list ([subswath_mask]). The official runconfig gives it as a
+# scalar, which ISCE3 0.25's schema rejects.
+
+runconfig:
+    name: NISAR_INSAR_RUNCONFIG
+    groups:
+        pge_name_group:
+            pge_name: INSAR_L_PGE
+        primary_executable:
+            product_type: GUNW
+        debug_level_group:
+            debug_switch: false
+        processing:
+            input_subset:
+                list_of_frequencies:
+                    A: [HH]
+            geocode:
+                output_posting:
+                    A:
+                        x_posting: 80
+                        y_posting: 80
+                wrapped_interferogram:
+                    interp_method: BILINEAR
+                    output_posting:
+                        A:
+                            x_posting: 20
+                            y_posting: 20
+            troposphere_delay:
+                enabled: true
+                package: raider
+                weather_model_type: HRES
+                delay_direction: line_of_sight_mapping
+                enable_wet_product: true
+                enable_hydrostatic_product: true
+                enable_comb_product: false
+            ionosphere_phase_correction:
+                enabled: true
+                lines_per_block: 8000
+                spectral_diversity: main_diff_ms_band
+                dispersive_filter:
+                    filter_mask_type:
+                    - coherence
+                    - subswath_mask
+                    filter_coherence_threshold: 0.2
+                    kernel_range: 33
+                    kernel_azimuth: 132
+                    sigma_range: 11
+                    sigma_azimuth: 43
+                    filling_guide_filter_method: median_gaussian
+                    filling_guide_median_size: 3
+                    filling_outlier_threshold: 3.5
+                    filling_outlier_min_scale: 0.0
+                    filling_outlier_mad_scale_factor: 1.4826
+            dense_offsets:
+                enabled: true
+                window_range: 64
+                window_azimuth: 96
+                half_search_range: 32
+                half_search_azimuth: 32
+                skip_range: 40
+                skip_azimuth: 75
+                correlation_surface_oversampling_factor: 16
+                deramping_method: complex
+            offsets_product:
+                enabled: false
+            rubbersheet:
+                enabled: true
+                polyfitting:
+                    enabled: true
+                    degree: 2
+                    critical_value: 0.1
+                    samples_along_range: 200
+                    samples_along_azimuth: 200
+            fine_resample:
+                enabled: true
+            crossmul:
+                range_looks: 3
+                azimuth_looks: 6
+            phase_unwrap:
+                range_looks: 7
+                azimuth_looks: 16
+                preprocess_wrapped_phase:
+                    enabled: true
+                    mask:
+                        mask_type: [subswath_mask]
+                bridge:
+                    enabled: true
+        worker:
+            internet_access: false
+            gpu_enabled: false
+            intermediate_files_removal_enabled: true
+        qa:
+            rifg:
+                qa_reports:
+                    browse:
+                        output_browse_latlon: true
+                    correlation_surface_peak:
+                        near_zero_threshold: -1
+                        zero_is_invalid: false
+            runw:
+                qa_reports:
+                    browse:
+                        output_browse_latlon: true
+                        rewrap: 2
+                    correlation_surface_peak:
+                        near_zero_threshold: -1
+                        zero_is_invalid: false
+            gunw:
+                qa_reports:
+                    browse:
+                        output_browse_latlon: true
+                        rewrap: 2
+                    correlation_surface_peak:
+                        near_zero_threshold: -1
+                        zero_is_invalid: false
+            roff:
+                qa_reports:
+                    browse:
+                        output_browse_latlon: true
+            goff:
+                qa_reports:
+                    browse:
+                        output_browse_latlon: true
