@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Matrix Machines</title>
+<style>
+:root{--bg:#f7f3ec;--card:#fffdf8;--ink:#1f1d1a;--mute:#6b665e;--line:#e3ddd2;--c1:#d9581a;--c2:#0f8f84;--gold:#c99700;--good:#2f8a3e;--bad:#c23b3b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:520px;margin:0 auto;padding:14px 14px 40px}
+h1{font-size:23px;margin:4px 0 2px;letter-spacing:-.01em}
+header p{margin:0;color:var(--mute);font-size:14px}
+nav{display:flex;gap:6px;overflow-x:auto;margin:14px 0 6px;padding-bottom:2px}
+nav button{flex:none;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font:inherit;font-size:14px;color:var(--ink);cursor:pointer}
+nav button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+#blurb{color:var(--mute);font-size:14px;margin:4px 0 8px}
+.dots{display:flex;gap:6px;margin:0 0 10px}
+.dots button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:12px;color:var(--ink);cursor:pointer}
+.dots button.done{background:var(--good);color:#fff;border-color:var(--good)}
+.dots button.cur{outline:2px solid var(--ink);outline-offset:1px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.ask{font-size:17px;margin:0 0 10px}
+.row{display:flex;align-items:center;gap:14px}
+.mat{display:inline-flex;align-items:stretch;font:600 20px ui-monospace,Menlo,Consolas,monospace}
+.mat .br{width:7px;border:2px solid var(--ink)}.mat .l{border-right:none}.mat .r{border-left:none}
+.mat .col{display:flex;flex-direction:column;padding:2px 8px;text-align:center}
+.legend{font-size:13px;color:var(--mute);line-height:1.5}
+.c1{color:var(--c1)}.c2{color:var(--c2)}.gold{color:var(--gold)}
+svg{width:100%;height:auto;display:block;touch-action:none;background:#fff;border:1px solid var(--line);border-radius:10px;margin:10px 0 6px;user-select:none;-webkit-user-select:none}
+.readout{font:14px ui-monospace,Menlo,Consolas,monospace;color:var(--mute);min-height:20px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.btns button,.choices button{font:inherit;padding:9px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+.btns .primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.fb{margin-top:10px;padding:10px 12px;border-radius:10px;display:none}
+.fb.show{display:block}
+.fb.good{background:#e9f5ea;border:1px solid #bfe0c3}
+.fb.bad{background:#fbecec;border:1px solid #efc6c6}
+.fb.hint{background:#fdf6e2;border:1px solid #efdfae}
+.choices{display:grid;gap:8px;margin-top:8px}
+.choices button{text-align:left}
+.choices button.right{border-color:var(--good);background:#e9f5ea}
+.choices button.wrong{border-color:var(--bad);background:#fbecec;opacity:.75}
+.eq{font:15px ui-monospace,Menlo,Consolas,monospace;background:#f3efe7;border-radius:8px;padding:8px 10px;margin-top:10px}
+.eq small{display:block;font:13px system-ui,sans-serif;color:var(--mute);margin-top:4px}
+footer{margin-top:18px;color:var(--mute);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Matrix Machines</h1>
+    <p>A matrix is a machine that moves the plane. Predict, drag, check.</p>
+  </header>
+  <nav id="chapters"></nav>
+  <p id="blurb"></p>
+  <div class="dots" id="dots"></div>
+  <section class="card">
+    <p class="ask" id="ask"></p>
+    <div class="row"><div id="mat"></div><div class="legend" id="legend"></div></div>
+    <div id="eq"></div>
+    <svg id="board" viewBox="-6.5 -6.5 13 13"><g id="g" transform="scale(1,-1)"></g></svg>
+    <div class="readout" id="readout"></div>
+    <div class="choices" id="choices"></div>
+    <div class="btns" id="btns"></div>
+    <div class="fb" id="fb"></div>
+  </section>
+  <footer>Columns are arrows. Rows are equations. Same machine, two views.</footer>
+</main>
+<script>
+// ---------- math ----------
+const app=(M,v)=>[v[0]*M.a[0]+v[1]*M.b[0], v[0]*M.a[1]+v[1]*M.b[1]];
+const rowsApp=(M,v)=>[v[0]*M.a[0]+v[1]*M.a[1], v[0]*M.b[0]+v[1]*M.b[1]]; // the "read rows as arrows" mistake
+const det=M=>M.a[0]*M.b[1]-M.b[0]*M.a[1];
+const same=(p,q)=>p[0]===q[0]&&p[1]===q[1];
+const n=x=>String(Math.round(x*100)/100).replace(/-/g,'−');
+const fmt=v=>`(${n(v[0])}, ${n(v[1])})`;
+const clamp=x=>Math.max(-6,Math.min(6,x));
+const mk=(a,b)=>({a,b});
+function solutions(M,t){const s=[];for(let x=-12;x<=12;x++)for(let y=-12;y<=12;y++)if(same(app(M,[x,y]),t))s.push([x,y]);return s}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+// ---------- content ----------
+const O='<span class="c1">orange</span>', T='<span class="c2">teal</span>';
+const CH=[
+{title:'1 · Land it',mode:'land',blurb:'The left column is where (1,0) lands; the right column is where (0,1) lands. Drag the gold dot to where the gray input comes out.',levels:[
+ {M:mk([2,0],[0,3]),v:[1,1],hints:[`The ${O} arrow is where (1,0) lands. The ${T} arrow is where (0,1) lands. Which of those do you need to build (1,1)?`,`(1,1) means one step of (1,0) and one step of (0,1). So: one ${O} arrow, then one ${T} arrow from its tip. Where are you now?`],
+  win:`(1,1) → (2,3). Every input is a recipe: <i>x</i> ${O} arrows plus <i>y</i> ${T} arrows. Before you move on: where would (2,1) land?`},
+ {M:mk([2,0],[0,3]),v:[-1,2],hints:['What could "−1 orange arrows" mean? Which way would you walk?','−1·(2,0) + 2·(0,3) = ?'],
+  win:'Negative numbers just walk an arrow backwards. Try putting this machine into one plain sentence: what does it do to a whole picture?'},
+ {M:mk([1,0],[1,1]),v:[2,1],hints:[`The ${O} arrow didn't move at all. What happened to the ${T} one?`,`2 ${O} arrows take you to (2,0). Now add 1 ${T} arrow, (1,1).`],
+  win:'(2,1) → (3,1). The x-axis stays put; things higher up slide right. That is a <b>shear</b>. Where would (2,0) land? Why doesn\'t it move?'},
+ {M:mk([0,1],[-1,0]),v:[2,1],hints:['(1,0) now points straight up. Which way does (0,1) point?',`2 ${O} arrows: (0,2). Then 1 ${T} arrow: (−1,0).`],
+  win:'Both arrows turned a quarter-turn left, so everything did. Did the area of the square change?'},
+ {M:mk([1,2],[0,1]),v:[1,2],extra:' Careful: read the <b>columns</b>.',hints:['Which one shows where (1,0) lands: the top row or the left column?','1 × (1,2) + 2 × (0,1) = ?'],
+  win:'Columns, not rows. The top row (1, 0) is not an arrow in the picture; the left column (1, 2) is. Bonus puzzle: compare the top row with the output\'s x-coordinate. What does a row tell you?'},
+ {M:mk([1,2],[2,4]),v:[1,1],hints:['Look at the two arrows. Notice anything about their directions?','1·(1,2) + 1·(2,4) = ?'],
+  win:'(1,1) → (3,6). The two arrows point the same way, so every output lies on one line. Chapter 4 asks: what can <i>never</i> come out of this machine?'}
+]},
+{title:'2 · Build it',mode:'build',blurb:'Drag the arrow tips onto the rings of the same color to match the dashed shape. The matrix writes itself as you drag.',levels:[
+ {M:mk([2,0],[0,3]),ask:'Stretch the square into the dashed 2-by-3 rectangle.',win:'Area went from 1 to 6. Each column is an arrow tip. Can you predict the area for columns (3,0) and (0,2) before building it?'},
+ {M:mk([1,0],[1,1]),ask:'Shear the square into the dashed shape.',win:'Area is still 1, like sliding a deck of cards. Which arrow didn\'t you need to move, and what does that say about the x-axis?'},
+ {M:mk([0,1],[-1,0]),ask:'Turn the square a quarter-turn.',win:'A quarter-turn. The matrix has a −1 in it. Which arrow does that −1 belong to, and why?'},
+ {M:mk([-1,0],[0,1]),ask:'Flip the square like a mirror.',win:'Area is still 1, but the determinant is −1: the square got flipped over. Walk from orange to teal. Do you turn the same way as before?'},
+ {M:mk([1,2],[2,4]),ask:'This target is a square that got squashed flat. Match it.',win:'Zero area: the whole plane fell onto one line, so the determinant is 0. Once the plane lands on a line, can every point still be reached?'}
+]},
+{title:'3 · Say it',mode:'words',blurb:'Read the columns, picture the two arrows, then pick the plain-words description. Predict first, then watch.',levels:[
+ {M:mk([3,0],[0,3]),choices:['Makes everything 3 times bigger in every direction','Stretches things sideways only','Moves everything 3 steps to the right','Flattens everything onto a line'],explain:'Both arrows got 3× longer and kept their directions, so every shape scales by 3 (and area by 9).'},
+ {M:mk([1,0],[0,0]),choices:['Squashes everything flat onto the x-axis','Deletes the x-axis','Rotates everything onto the x-axis','Does nothing'],explain:'(0,1) lands on (0,0), so all height vanishes. Every point drops straight down to the x-axis, like a shadow at noon.'},
+ {M:mk([0,1],[-1,0]),choices:['Turns everything a quarter-turn counterclockwise','Mirrors left-to-right','Turns everything a quarter-turn clockwise','Swaps x and y'],explain:'(1,0) goes up to (0,1) and (0,1) goes left to (−1,0). Both turned left by 90°.'},
+ {M:mk([1,0],[2,1]),choices:['Slides each row sideways: the higher it is, the farther it slides','Stretches everything upward by 2','Rotates everything a little','Doubles the width'],explain:'The x-axis stays put but (0,1) leans over to (2,1). Height 1 slides 2, height 2 slides 4… a shear.'},
+ {M:mk([0,1],[1,0]),choices:['Mirrors across the diagonal y = x (swaps x and y)','Turns everything a quarter-turn','Flips everything upside-down','Does nothing'],explain:'(1,0) and (0,1) trade places, so every (x, y) becomes (y, x).'},
+ {M:mk([2,1],[4,2]),choices:['Flattens the whole plane onto a single line','Stretches everything by 2','Shears everything to the right','Rotates and stretches'],explain:'The teal arrow (4,2) is just 2 × the orange arrow (2,1). Two arrows pointing the same way can\'t cover a plane, so everything lands on one line.'}
+]},
+{title:'4 · Undo it',mode:'reverse',blurb:'Run the machine backwards. Drag the gray input until the gold output hits the star, or decide that no input can.',levels:[
+ {M:mk([2,0],[0,3]),t:[4,3],hints:['You need to go 4 sideways. Each orange arrow gives 2. How many do you need?','And 3 up, using teal arrows that are 3 tall?'],
+  win:'(2,1) → (4,3). Undoing a machine is the same as solving the equations above. Could any other input land there? Why not?'},
+ {M:mk([1,1],[1,-1]),t:[3,1],hints:['Look at the equations: x + y = 3 and x − y = 1. Which two numbers add to 3 and differ by 1?','In arrows: some orange (1,1)s plus some teal (1,−1)s. Try x = 2.'],
+  win:'(2,1). Two rows give two equations; two columns give two arrows. It\'s the same problem seen two ways. Which view felt easier?'},
+ {M:mk([1,0],[1,1]),t:[1,2],hints:['Only the teal arrow lifts you up. How many teal arrows get you 2 high?','2 teal arrows land at (2,2), but you need x = 1. How can orange move you left?'],
+  win:'(−1,2). Sometimes the recipe needs a negative amount. Could this shear ever miss a target? Why or why not?'},
+ {M:mk([1,2],[2,4]),t:[3,6],ask:'This machine flattens the plane. Find an input that lands on the star.',hints:['Drag around and watch the gold trail. Where can outputs go?','(1,1) is one answer. Can you find one with y = 0?'],
+  win:'Infinitely many inputs work: (3,0), (1,1), (−1,2), (5,−1)… Add 2 to x and take 1 from y, and the output doesn\'t budge. Why? (What is 2·orange − 1·teal?)'},
+ {M:mk([1,2],[2,4]),t:[1,0],ask:'Same machine. Get the output to (1, 0).',hints:['Drag for a while and watch the gold trail. What shape does it make?','Every output is x·(1,2) + y·(2,4). Both arrows lie on the line y = 2x. Is (1,0) on that line?'],
+  win:'No input works. Every output is (x + 2y)·(1, 2), so it always sits on the line through (1, 2), and (1,0) is off that line. The equations say the same thing: x + 2y = 1, but 2x + 4y = 0 means x + 2y = 0. They contradict each other. Can you say in one sentence why a flattened plane leaves points unreachable?'},
+ {M:mk([2,1],[4,2]),t:[-2,-1],ask:'Possible, impossible, or many answers? You decide.',hints:['Is the star on the line the arrows point along?','Try making the output exactly −1 × orange.'],
+  win:'Many answers: (−1,0), (1,−1), (−3,1)… The star sits on the line, so infinitely many inputs reach it. For a flattening machine: on the line means infinitely many, off the line means none. Never exactly one. Why can\'t it be exactly one?'}
+]}
+];
+
+// ---------- state ----------
+let S={ch:0,lv:0}, R={};
+let done=new Set();
+try{done=new Set(JSON.parse(localStorage.getItem('mm-done')||'[]'))}catch(e){}
+function save(){try{localStorage.setItem('mm-done',JSON.stringify([...done]))}catch(e){}}
+const L=()=>CH[S.ch].levels[S.lv];
+const key=(c,l)=>c+'-'+l;
+const $=id=>document.getElementById(id);
+
+function load(ch,lv){
+  S={ch,lv};const mode=CH[ch].mode;
+  R={mode,hint:0,tries:0,won:false,showPath:false,showWarp:false,found:new Set(),trail:[],t:0,wrong:new Set(),anim:0};
+  if(mode==='land')R.p=[0,0];
+  if(mode==='build'){R.a=[1,0];R.b=[0,1]}
+  if(mode==='reverse'){R.in=[0,0];R.trail=[[0,0]]}
+  if(mode==='words')R.order=shuffle([0,1,2,3]);
+  hideFb();ui();render();
+}
+
+// ---------- UI ----------
+function matHTML(M){return `<span class="mat"><span class="br l"></span><span class="col c1"><span>${n(M.a[0])}</span><span>${n(M.a[1])}</span></span><span class="col c2"><span>${n(M.b[0])}</span><span>${n(M.b[1])}</span></span><span class="br r"></span></span>`}
+function term(c,v,first){if(c===0)return'';const m=Math.abs(c)===1?'':Math.abs(c);return first?(c<0?'−':'')+m+v:(c<0?' − ':' + ')+m+v}
+function eqLine(c1,c2,r){let s=term(c1,'x',true);s+=s?term(c2,'y',false):term(c2,'y',true);return `${s||'0'} = ${n(r)}`}
+
+function panel(){
+  const l=L();
+  const M=R.mode==='build'?mk(R.a,R.b):l.M;
+  $('mat').innerHTML=matHTML(M);
+  let leg=`<span class="c1">left column</span> = where (1,0) lands<br><span class="c2">right column</span> = where (0,1) lands`;
+  if(R.mode==='build'){const d=det(M);leg+=`<br>det = ${n(d)} → area × ${n(Math.abs(d))}${d<0?' (flipped)':''}`}
+  $('legend').innerHTML=leg;
+}
+function btn(label,fn,primary){const b=document.createElement('button');b.textContent=label;if(primary)b.className='primary';b.onclick=fn;$('btns').appendChild(b)}
+
+function ui(){
+  const c=CH[S.ch],l=L();
+  $('chapters').innerHTML='';
+  CH.forEach((ch,i)=>{const b=document.createElement('button');b.textContent=ch.title;if(i===S.ch)b.className='on';b.onclick=()=>load(i,0);$('chapters').appendChild(b)});
+  $('blurb').textContent=c.blurb;
+  $('dots').innerHTML='';
+  c.levels.forEach((_,i)=>{const b=document.createElement('button');b.textContent=i+1;b.className=(done.has(key(S.ch,i))?'done ':'')+(i===S.lv?'cur':'');b.onclick=()=>load(S.ch,i);$('dots').appendChild(b)});
+  let ask='';
+  if(R.mode==='land')ask=`The gray input <b>${fmt(l.v)}</b> goes into the machine. Drag the <span class="gold">gold dot</span> to where it comes out.${l.extra||''}`;
+  if(R.mode==='build')ask=l.ask;
+  if(R.mode==='words')ask='In plain words, what does this machine do?';
+  if(R.mode==='reverse')ask=l.ask||`Which input lands on the star <b>${fmt(l.t)}</b>?`;
+  $('ask').innerHTML=ask;
+  panel();
+  // equations
+  if(R.mode==='reverse'){const M=l.M;$('eq').innerHTML=`<div class="eq">${eqLine(M.a[0],M.b[0],l.t[0])}<br>${eqLine(M.a[1],M.b[1],l.t[1])}<small>Each equation reads one <b>row</b>. The picture reads <b>columns</b>: x·<span class="c1">${fmt(M.a)}</span> + y·<span class="c2">${fmt(M.b)}</span> = ${fmt(l.t)}.</small></div>`}
+  else $('eq').innerHTML='';
+  // choices
+  $('choices').innerHTML='';
+  if(R.mode==='words'){R.order.forEach(i=>{const b=document.createElement('button');b.textContent=l.choices[i];if(R.won&&i===0)b.className='right';else if(R.wrong.has(i))b.className='wrong';b.onclick=()=>choose(i);$('choices').appendChild(b)})}
+  // buttons
+  $('btns').innerHTML='';
+  if(!R.won){
+    if(R.mode==='land')btn('Check',checkLand,true);
+    if(R.mode==='build')btn('Check',checkBuild,true);
+    if(R.mode==='reverse')btn('No input can do it',impossible);
+    btn('Hint',hint);
+    if(R.mode==='land'&&(R.tries>=2||R.hint>=2)&&!R.showPath)btn('Show me the walk',showWalk);
+  }else{
+    if(R.mode==='words')btn('Watch again',play);
+    const last=S.ch===CH.length-1&&S.lv===CH[S.ch].levels.length-1;
+    if(!last)btn(S.lv===CH[S.ch].levels.length-1?'Next chapter →':'Next →',next,true);
+  }
+}
+function showFb(kind,html){const f=$('fb');f.className='fb show '+kind;f.innerHTML=html}
+function hideFb(){$('fb').className='fb'}
+
+// ---------- drawing ----------
+const C1='#d9581a',C2='#0f8f84',GOLD='#c99700',INK='#1f1d1a',GRAY='#7d776d';
+const line=(p,q,c,w,x='')=>`<line x1="${p[0]}" y1="${p[1]}" x2="${q[0]}" y2="${q[1]}" stroke="${c}" stroke-width="${w}" stroke-linecap="round" vector-effect="non-scaling-stroke" ${x}/>`;
+const dot=(p,r,f,x='')=>`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="${f}" ${x}/>`;
+const ring=(p,c,r=.32)=>`<circle cx="${p[0]}" cy="${p[1]}" r="${r}" fill="none" stroke="${c}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`;
+function arrow(p,q,c,op=1){const dx=q[0]-p[0],dy=q[1]-p[1],len=Math.hypot(dx,dy);if(len<1e-6)return dot(p,.13,c);const ux=dx/len,uy=dy/len,h=Math.min(.38,len*.5),w=.2,bx=q[0]-ux*h,by=q[1]-uy*h;return `<g opacity="${op}">${line(p,[bx,by],c,3.5)}<polygon points="${q[0]},${q[1]} ${bx-uy*w},${by+ux*w} ${bx+uy*w},${by-ux*w}" fill="${c}"/></g>`}
+function grid(){let s='';for(let i=-6;i<=6;i++){const c=i===0?'#b9b2a6':'#eee9e0',w=i===0?1.6:1;s+=line([i,-7],[i,7],c,w)+line([-7,i],[7,i],c,w)}return s}
+function warped(M){let s='';for(let i=-8;i<=8;i++){s+=line(app(M,[i,-9]),app(M,[i,9]),'rgba(15,143,132,.28)',1)+line(app(M,[-9,i]),app(M,[9,i]),'rgba(217,88,26,.25)',1)}return s}
+function square(M,fill,stroke='none',x=''){const p=[[0,0],M.a,[M.a[0]+M.b[0],M.a[1]+M.b[1]],M.b];return `<polygon points="${p.map(q=>q.join(',')).join(' ')}" fill="${fill}" stroke="${stroke}" stroke-width="2" vector-effect="non-scaling-stroke" ${x}/>`}
+const handle=(p,c)=>dot(p,.6,c,'opacity=".18"')+dot(p,.3,c,'stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"');
+
+function render(){
+  const l=L();let s=grid(),ro='';
+  if(R.mode==='land'){
+    if(R.showWarp)s+=warped(l.M);
+    s+=square(l.M,'rgba(31,29,26,.06)');
+    s+=arrow([0,0],l.M.a,C1)+arrow([0,0],l.M.b,C2);
+    s+=ring(l.v,GRAY)+dot(l.v,.1,GRAY);
+    if(R.showPath){const m=[l.v[0]*l.M.a[0],l.v[0]*l.M.a[1]];s+=line([0,0],m,C1,5,'stroke-dasharray="1 7" opacity=".9"')+line(m,app(l.M,l.v),C2,5,'stroke-dasharray="1 7" opacity=".9"')}
+    s+=handle(R.p,GOLD);
+    ro=`input ${fmt(l.v)} · gold dot ${fmt(R.p)}`;
+  }
+  if(R.mode==='build'){
+    const M=mk(R.a,R.b);
+    s+=warped(M);
+    s+=square(l.M,'none',INK,'stroke-dasharray="6 5"');
+    s+=ring(l.M.a,C1,.42)+ring(l.M.b,C2,.42);
+    s+=square(M,'rgba(201,151,0,.18)');
+    s+=arrow([0,0],R.a,C1)+arrow([0,0],R.b,C2);
+    s+=handle(R.a,C1)+handle(R.b,C2);
+    ro=`orange tip ${fmt(R.a)} · teal tip ${fmt(R.b)}`;
+  }
+  if(R.mode==='words'){
+    const t=R.t,M=mk([1+(l.M.a[0]-1)*t,l.M.a[1]*t],[l.M.b[0]*t,1+(l.M.b[1]-1)*t]);
+    s+=warped(M)+square(M,'rgba(201,151,0,.22)',INK)+arrow([0,0],M.a,C1)+arrow([0,0],M.b,C2);
+    ro=R.won?'Watch where the two arrows take the square.':'Predict first. The animation plays after you answer.';
+  }
+  if(R.mode==='reverse'){
+    const out=app(l.M,R.in);
+    s+=arrow([0,0],l.M.a,C1,.45)+arrow([0,0],l.M.b,C2,.45);
+    R.trail.forEach(p=>s+=dot(p,.12,GOLD,'opacity=".45"'));
+    s+=ring(l.t,INK,.45)+line([l.t[0]-.25,l.t[1]],[l.t[0]+.25,l.t[1]],INK,2)+line([l.t[0],l.t[1]-.25],[l.t[0],l.t[1]+.25],INK,2);
+    s+=line(R.in,out,GRAY,1.5,'stroke-dasharray="3 4"');
+    s+=handle(R.in,GRAY)+dot(out,.26,GOLD,'stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"');
+    ro=`input ${fmt(R.in)} → output <span class="gold">${fmt(out)}</span>`;
+  }
+  $('g').innerHTML=s;$('readout').innerHTML=ro;
+}
+
+// ---------- dragging (mouse + touch) ----------
+const svg=$('board');
+function toU(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform($('g').getScreenCTM().inverse());return[q.x,q.y]}
+function handles(){if(R.mode==='land')return[['p',R.p]];if(R.mode==='build')return[['a',R.a],['b',R.b]];if(R.mode==='reverse')return[['in',R.in]];return[]}
+let drag=null;
+svg.addEventListener('pointerdown',e=>{
+  const p=toU(e),hs=handles();if(!hs.length)return;
+  let best=null,bd=1.4;
+  for(const[k,pos]of hs){const d=Math.hypot(pos[0]-p[0],pos[1]-p[1]);if(d<bd){bd=d;best=k}}
+  if(!best&&hs.length===1)best=hs[0][0]; // tap anywhere to place a single dot
+  if(!best)return;
+  drag=best;svg.setPointerCapture(e.pointerId);move(p);e.preventDefault();
+});
+svg.addEventListener('pointermove',e=>{if(drag)move(toU(e))});
+const end=()=>{if(drag){drag=null;dropped()}};
+svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',end);
+function move(p){
+  const q=[clamp(Math.round(p[0])),clamp(Math.round(p[1]))];
+  if(same(q,R[drag]))return;
+  R[drag]=q;
+  if(R.mode==='reverse'){const o=app(L().M,q);if(!R.trail.some(t=>same(t,o)))R.trail.push(o)}
+  if(R.mode==='build')panel();
+  render();
+}
+function dropped(){if(R.mode==='reverse')checkReverse()}
+
+// ---------- game logic ----------
+function win(text){
+  R.won=true;done.add(key(S.ch,S.lv));save();
+  showFb('good','<b>Nice.</b> '+text);ui();render();
+}
+function hint(){
+  const l=L();let h;
+  if(R.mode==='build')h=[`The ${O} ring marks where (1,0) should land. Drag the ${O} tip onto it.`,'Each tip\'s coordinates become one column of the matrix. Watch the matrix change as you drag.'];
+  else if(R.mode==='words')h=['Where does (1,0) go? That\'s the left column. Picture that arrow.','Now where does (0,1) go? Picture both arrows and the square they make.'];
+  else h=l.hints;
+  showFb('hint',h[Math.min(R.hint,h.length-1)]);
+  R.hint++;
+  if(R.mode==='land'&&R.hint>=2){R.showWarp=true;render();$('fb').innerHTML+=' <br><small>I\'ve drawn the moved grid. Count along its lines.</small>'}
+  ui();
+}
+function showWalk(){
+  const l=L();R.showPath=true;render();
+  showFb('hint',`Follow the dotted walk: ${n(l.v[0])} × ${O} ${fmt(l.M.a)}, then ${n(l.v[1])} × ${T} ${fmt(l.M.b)}. Where does the walk end? Drag there and check.`);ui();
+}
+function checkLand(){
+  const l=L(),ans=app(l.M,l.v);
+  if(same(R.p,ans)){R.showPath=true;win(l.win);return}
+  R.tries++;let m;
+  if(same(R.p,rowsApp(l.M,l.v)))m=`You landed on ${fmt(R.p)}. That's what you get by reading the <b>rows</b> as arrows. In the picture, which shows where (1,0) goes: the top row or the <span class="c1">left column</span>?`;
+  else if(same(R.p,l.v))m='That\'s where the input started. The machine moves it. Where does it come out?';
+  else if(same(R.p,[0,0]))m='Tap or drag the gold dot to where you think the input lands.';
+  else m=`Not quite. Ask yourself: how many ${O} arrows does ${fmt(l.v)} call for, and how many ${T} ones?`;
+  showFb('bad',m);ui();
+}
+function checkBuild(){
+  const l=L(),okA=same(R.a,l.M.a),okB=same(R.b,l.M.b);
+  if(okA&&okB){win(l.win);return}
+  if(same(R.a,l.M.b)&&same(R.b,l.M.a))showFb('bad','Right shape, but the arrows are swapped! Which ring is (1,0) supposed to land on?');
+  else if(okA)showFb('bad',`The ${O} tip is right. Where should (0,1), the ${T} tip, end up?`);
+  else if(okB)showFb('bad',`The ${T} tip is right. Now the ${O} tip: where should (1,0) land?`);
+  else showFb('bad','Not yet. Put each tip on the ring of its own color.');
+}
+function choose(i){
+  if(R.won)return;const l=L();
+  if(i===0){win(l.explain);play()}
+  else{R.wrong.add(i);showFb('bad','Not quite. Where does (1,0) go under this matrix, and does that description send it there?');ui()}
+}
+function play(){
+  const id=++R.anim,t0=performance.now();
+  const step=now=>{if(id!==R.anim)return;const u=Math.min(1,(now-t0)/1500);R.t=u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;render();if(u<1)requestAnimationFrame(step)};
+  R.t=0;requestAnimationFrame(step);
+}
+function checkReverse(){
+  if(R.won)return;const l=L();
+  if(!same(app(l.M,R.in),l.t))return;
+  if(det(l.M)!==0){win(l.win);return}
+  R.found.add(R.in.join(','));
+  if(R.found.size>=2)win(l.win);
+  else showFb('hint',`Found one: ${fmt(R.in)} lands on the star. Is it the <b>only</b> input that works? Find a different one.`);
+}
+function impossible(){
+  if(R.won)return;const l=L();
+  if(solutions(l.M,l.t).length===0)win(l.win);
+  else showFb('bad','Are you sure? Some input does reach the star. Watch where the gold trail is able to go.');
+}
+function next(){
+  let{ch,lv}=S;lv++;
+  if(lv>=CH[ch].levels.length){ch++;lv=0}
+  if(ch<CH.length){load(ch,lv);window.scrollTo({top:0,behavior:'smooth'})}
+}
+load(0,0);
+</script>
+</body>
+</html>
